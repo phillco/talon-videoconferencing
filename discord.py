@@ -39,6 +39,10 @@ OAUTH2_CACHE_PATH = os.path.expanduser("~/.discord-creds")
 VERBOSE_LOGGING = False
 
 
+class DiscordError(RuntimeError):
+    pass
+
+
 class DiscordClient:
     """Client that connects to Discord's local IPC API"""
 
@@ -47,7 +51,7 @@ class DiscordClient:
 
         system = platform.system().lower()
         if system not in ["darwin", "linux", "windows"]:
-            raise RuntimeError(f"Discord IPC doesn't support {system}.")
+            raise DiscordError(f"Discord IPC doesn't support {system}.")
 
         self.platform = system
         self.ipc_path = self._get_ipc_path()
@@ -124,7 +128,7 @@ class DiscordClient:
             else:
                 self.socket.sendall(encoded_payload)
         except Exception as e:
-            raise RuntimeError(f"Can't send data to Discord via IPC: {e}")
+            raise DiscordError(f"Can't send data to Discord via IPC: {e}")
 
     def connect(self):
         """Connect to Discord Client via IPC."""
@@ -140,7 +144,7 @@ class DiscordClient:
                 self.socket.settimeout(0.25)
                 self.socket.connect(self.ipc_path)
         except Exception as e:
-            raise RuntimeError(f"Can't connect to Discord Client: {e}")
+            raise DiscordError(f"Can't connect to Discord Client: {e}")
 
         # Handshake
         self._send(0, {"v": 1, "client_id": self.client_id})
@@ -272,7 +276,7 @@ class DiscordClient:
         self._send(1, payload)
         data = self._decode()["data"]
         if data.get("code"):
-            raise RuntimeError(
+            raise DiscordError(
                 f"Error code {data.get('code')} from Discord: {data['message']}"
             )
 
@@ -307,7 +311,7 @@ def create_discord_client() -> DiscordClient:
             redirect_uri = obj["redirect_uri"]
             return DiscordClient(client_id, client_secret, redirect_uri)
 
-    raise RuntimeError(
+    raise DiscordError(
         f"To create a Discord client, please create a file at {OAUTH2_CREDENTIALS_PATH} with your client ID and secret."
     )
 
@@ -317,7 +321,7 @@ def validate_client(client: DiscordClient):
         # verify that the client is connected by reading its voice settings
         _ = client.get_voice_settings()
         return True
-    except RuntimeError as e:
+    except DiscordError as e:
         print(
             f"[discord_client] client is not valid: {type(e).__name__}: {e}; retrying"
         )
