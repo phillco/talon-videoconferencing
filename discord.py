@@ -7,22 +7,31 @@ import struct
 import uuid
 
 import requests
-from talon import Context, Module, actions, app
+from talon import Context, Module, actions
 
-API_ENDPOINT = "https://discord.com/api/v10"
-
+# ================================================================================
 # SET UP INSTRUCTIONS:
-# First create an app here: https://discord.com/developers/applications
+# ================================================================================
 
-# Then, create a JSON file at this path:
+# 1. Create an app here: https://discord.com/developers/applications
+
+# 2. Create a JSON file at this path:
 OAUTH2_CREDENTIALS_PATH = os.path.expanduser("~/.discord-oauth2-creds")
 
-# with client_id, client_secret, redirect_uri keys:
+# ...with client_id, client_secret, redirect_uri keys, like so:
 # {
 # 	"client_id": "YOUR_CLIENT_ID",
 # 	"client_secret": "YOUR_CLIENT_SECRET",
 # 	"redirect_uri": "https://YOUR_REDIRECT_URL"
 # }
+
+# 3. That's it! Try calling `actions.user.discord_toggle_mute()` from the REPL.
+
+# ================================================================================
+# Constants
+# ================================================================================
+
+API_ENDPOINT = "https://discord.com/api/v10"
 
 # Where we store the refresh and access token on disk.
 OAUTH2_CACHE_PATH = os.path.expanduser("~/.discord-creds")
@@ -120,7 +129,7 @@ class DiscordClient:
     def connect(self):
         """Connect to Discord Client via IPC."""
         if self.connected:
-            print("Already connected.")
+            print("[discord_client] Already connected.")
             return
 
         try:
@@ -153,7 +162,7 @@ class DiscordClient:
 
     def authorize_if_needed(self):
         if os.path.exists(OAUTH2_CACHE_PATH):
-            # use the cached OAuth2 details
+            # Just use the cached OAuth2 details:
             with open(OAUTH2_CACHE_PATH) as f:
                 obj = json.load(f)
                 self.access_token = obj["access_token"]
@@ -163,7 +172,7 @@ class DiscordClient:
         self.oauth2_authorize()
 
     def oauth2_authorize(self):
-        print("performing OAuth2 authorization flow...")
+        print("[discord_client] Performing OAuth2 authorization flow...")
 
         payload = {
             "cmd": "AUTHORIZE",
@@ -180,7 +189,7 @@ class DiscordClient:
         self.oauth2_authenticate(code)
 
     def oauth2_authenticate(self, code):
-        print("Acquiring OAuth2 token...")
+        print("[discord_client] Acquiring OAuth2 token...")
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -200,7 +209,7 @@ class DiscordClient:
         self.access_token = http_resp.json()["access_token"]
 
     def oauth2_refresh(self):
-        print("Refreshing OAuth2 token...")
+        print("[discord_client] Refreshing OAuth2 token...")
         data = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
@@ -213,7 +222,7 @@ class DiscordClient:
             f"{API_ENDPOINT}/oauth2/token", data=data, headers=headers
         )
         print(
-            f"Refreshing token request got {http_resp.status_code} {http_resp.text}..."
+            f"[discord_client] Refreshing token request got {http_resp.status_code} {http_resp.text}..."
         )
 
         http_resp.raise_for_status()
@@ -225,7 +234,7 @@ class DiscordClient:
 
     def authenticate(self):
         """Authenticates with the local RPC, after OAuth2 authentication is complete"""
-        print("Authenticating...")
+        print("[discord_client] Authenticating...")
         payload = {
             "cmd": "AUTHENTICATE",
             "nonce": str(uuid.uuid4()),
@@ -243,7 +252,7 @@ class DiscordClient:
             # NOTE(pcohen): prevent infinite looping here
             return self.authenticate()
 
-        print("Authenticating succeeded.")
+        print("[discord_client] Authenticating succeeded!")
 
     def update_activity(self, activity):
         """Update User's Discord activity."""
@@ -303,19 +312,32 @@ def create_discord_client() -> DiscordClient:
     )
 
 
+def validate_client(client: DiscordClient):
+    try:
+        # verify that the client is connected by reading its voice settings
+        _ = client.get_voice_settings()
+        return True
+    except RuntimeError as e:
+        print(
+            f"[discord_client] client is not valid: {type(e).__name__}: {e}; retrying"
+        )
+        return False
+
+
 @mod.action_class
 class Actions:
-    """Template for new files"""
+    """actions for controlling Discord"""
 
     def discord_client():
-        """returns a Discord client"""
+        """returns a Discord client, tries to validate that it is working"""
         global discord_client
-        if discord_client is None:
-            discord_client = create_discord_client()
-            discord_client.connect()
-            discord_client.authorize_if_needed()
-            discord_client.authenticate()
+        if discord_client is not None and validate_client(discord_client):
+            return discord_client
 
+        discord_client = create_discord_client()
+        discord_client.connect()
+        discord_client.authorize_if_needed()
+        discord_client.authenticate()
         return discord_client
 
     def discord_client_reconnect():
@@ -324,38 +346,30 @@ class Actions:
         discord_client = None
         return actions.user.discord_client()
 
+    def discord_voice_settings() -> dict:
+        """returns the current Discord voice settings"""
+        client = actions.user.discord_client()
+        return client.get_voice_settings()
+
     def discord_mute_status() -> bool:
         """returns the current mute status"""
-        client = actions.user.discord_client()
-        return client.get_voice_settings()["mute"]
+        return actions.user.discord_voice_settings()["mute"]
 
     def discord_set_mute_status(mute: bool):
-        """sets the mute status"""
+        """sets the Discord mute status"""
         client = actions.user.discord_client()
         client.set_mute_status(mute)
 
     def discord_toggle_mute(adjust_talon: bool = True):
         """toggles the mute status on Discord adjusts Talon appropriately"""
-        try:
-            try:
-                client = actions.user.discord_client()
-                settings = client.get_voice_settings()
-            except RuntimeError as e:
-                # TODO(pcohen): move this retry logic into the "get voice settings" command
-                print(
-                    f"Error during initial attempt; retrying: {type(e).__name__}: {e}"
-                )
-                client = actions.user.discord_client_reconnect()
-                settings = client.get_voice_settings()
-            old_status = settings["mute"]
-            new_status = not old_status
-            client.set_mute_status(new_status)
+        client = actions.user.discord_client()
+        settings = client.get_voice_settings()
+        old_status = settings["mute"]
+        new_status = not old_status
+        client.set_mute_status(new_status)
 
-            if new_status:
-                # TODO(pcohen): dump in progress audio
-                actions.speech.enable()
-            else:
-                actions.speech.disable()
-        except Exception as e:
-            app.notify(f"Error talking to Discord", f"{type(e).__name__}: {e}")
-            raise
+        if new_status:
+            # TODO(pcohen): dump in progress audio
+            actions.speech.enable()
+        else:
+            actions.speech.disable()
