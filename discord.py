@@ -11,11 +11,18 @@ from talon import Context, Module, actions, app
 
 API_ENDPOINT = "https://discord.com/api/v10"
 
-# Create an app here: https://discord.com/developers/applications
-# then fill these out:
-CLIENT_ID = "YOUR_CLIENT_ID"
-CLIENT_SECRET = "YOUR_CLIENT_SECRET"
-REDIRECT_URI = "YOUR_REDIRECT_URI"
+# SET UP INSTRUCTIONS:
+# First create an app here: https://discord.com/developers/applications
+
+# Then, create a JSON file at this path:
+OAUTH2_CREDENTIALS_PATH = os.path.expanduser("~/.discord-oauth2-creds")
+
+# with client_id, client_secret, redirect_uri keys:
+# {
+# 	"client_id": "YOUR_CLIENT_ID",
+# 	"client_secret": "YOUR_CLIENT_SECRET",
+# 	"redirect_uri": "https://YOUR_REDIRECT_URL"
+# }
 
 # Where we store the refresh and access token on disk.
 OAUTH2_CACHE_PATH = os.path.expanduser("~/.discord-creds")
@@ -26,7 +33,7 @@ VERBOSE_LOGGING = False
 class DiscordClient:
     """Client that connects to Discord's local IPC API"""
 
-    def __init__(self, client_id: str, client_secret: str):
+    def __init__(self, client_id: str, client_secret: str, redirect_uri: str):
         super().__init__()
 
         system = platform.system().lower()
@@ -38,6 +45,7 @@ class DiscordClient:
 
         self.client_id = client_id
         self.client_secret = client_secret
+        self.redirect_uri = redirect_uri
         self.access_token = None
         self.refresh_token = None
 
@@ -178,7 +186,7 @@ class DiscordClient:
             "client_secret": self.client_secret,
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": self.redirect_uri,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         http_resp = requests.post(
@@ -198,7 +206,7 @@ class DiscordClient:
             "client_secret": self.client_secret,
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": self.redirect_uri,
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         http_resp = requests.post(
@@ -281,6 +289,20 @@ mod = Module()
 discord_client = None
 
 
+def create_discord_client() -> DiscordClient:
+    if os.path.exists(OAUTH2_CREDENTIALS_PATH):
+        with open(OAUTH2_CREDENTIALS_PATH) as f:
+            obj = json.load(f)
+            client_id = obj["client_id"]
+            client_secret = obj["client_secret"]
+            redirect_uri = obj["redirect_uri"]
+            return DiscordClient(client_id, client_secret, redirect_uri)
+
+    raise RuntimeError(
+        f"To create a Discord client, please create a file at {OAUTH2_CREDENTIALS_PATH} with your client ID and secret."
+    )
+
+
 @mod.action_class
 class Actions:
     """Template for new files"""
@@ -289,7 +311,7 @@ class Actions:
         """returns a Discord client"""
         global discord_client
         if discord_client is None:
-            discord_client = DiscordClient(CLIENT_ID, CLIENT_SECRET)
+            discord_client = create_discord_client()
             discord_client.connect()
             discord_client.authorize_if_needed()
             discord_client.authenticate()
