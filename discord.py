@@ -91,26 +91,29 @@ class DiscordClient:
 
     def _decode(self):
         """Decode the data received from Discord."""
-        if self.platform == "windows":
-            encoded_header = b""
-            header_size = 8
+        try:
+            if self.platform == "windows":
+                encoded_header = b""
+                header_size = 8
 
-            while header_size:
-                encoded_header += self.socket.read(header_size)
-                header_size -= len(encoded_header)
+                while header_size:
+                    encoded_header += self.socket.read(header_size)
+                    header_size -= len(encoded_header)
 
-            decoded_header = struct.unpack("<ii", encoded_header)
-            encoded_data = b""
-            remaining_packet_size = int(decoded_header[1])
+                decoded_header = struct.unpack("<ii", encoded_header)
+                encoded_data = b""
+                remaining_packet_size = int(decoded_header[1])
 
-            while remaining_packet_size:
-                encoded_data += self.socket.read(remaining_packet_size)
-                remaining_packet_size -= len(encoded_data)
-        else:
-            recived_data = self.socket.recv(4096)
-            encoded_header = recived_data[:8]
-            decoded_header = struct.unpack("<ii", encoded_header)
-            encoded_data = recived_data[8:]
+                while remaining_packet_size:
+                    encoded_data += self.socket.read(remaining_packet_size)
+                    remaining_packet_size -= len(encoded_data)
+            else:
+                recived_data = self.socket.recv(4096)
+                encoded_header = recived_data[:8]
+                decoded_header = struct.unpack("<ii", encoded_header)
+                encoded_data = recived_data[8:]
+        except socket.timeout as e:
+            raise DiscordError(f"Socket timeout: {e}")
 
         result = json.loads(encoded_data.decode("utf-8"))
         if VERBOSE_LOGGING:
