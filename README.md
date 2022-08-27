@@ -4,4 +4,4 @@ Systems for intelligently controlling videoconferencing software from within Tal
 
 Currently supported systems:
 
-* Discord (requires a bit of set up)
+* Discord (requires a bit of set up): supports a action to globally mute or unmute Discord regardless of whether it's focused, as well as perform a "smart mute toggle" (toggle Discord mute status and put Talon into the opposite state)
