@@ -374,9 +374,4 @@ class Actions:
         old_status = settings["mute"]
         new_status = not old_status
         client.set_mute_status(new_status)
-
-        if new_status:
-            # TODO(pcohen): dump in progress audio
-            actions.speech.enable()
-        else:
-            actions.speech.disable()
+        return new_status
