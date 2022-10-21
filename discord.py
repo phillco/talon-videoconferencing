@@ -7,7 +7,7 @@ import struct
 import uuid
 
 import requests
-from talon import Context, Module, actions
+from talon import Context, Module, actions, ui
 
 # ================================================================================
 # SET UP INSTRUCTIONS:
@@ -272,6 +272,17 @@ class DiscordClient:
         self._send(1, payload)
         self._decode()
 
+    def select_voice_channel(self, channel_id: str):
+        """Select a voice channel."""
+        payload = {
+            "cmd": "SELECT_VOICE_CHANNEL",
+            "args": {"channel_id": channel_id},
+            "nonce": str(uuid.uuid4()),
+        }
+
+        self._send(1, payload)
+        self._decode()
+
     def get_voice_settings(self):
         """Returns the current voice settings."""
         payload = {"cmd": "GET_VOICE_SETTINGS", "nonce": str(uuid.uuid4())}
@@ -366,6 +377,15 @@ class Actions:
         """sets the Discord mute status"""
         client = actions.user.discord_client()
         client.set_mute_status(mute)
+
+    def discord_leave_meeting():
+        """leaves the current meeting"""
+        client = actions.user.discord_client()
+        client.select_voice_channel(None)
+
+    def discord_focus_meeting():
+        """focuses the current meeting"""
+        ui.apps(name="Discord")[0].focus()
 
     def discord_toggle_mute(adjust_talon: bool = True):
         """toggles the mute status on Discord adjusts Talon appropriately"""
