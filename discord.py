@@ -382,6 +382,8 @@ class Actions:
         """leaves the current meeting"""
         client = actions.user.discord_client()
         client.select_voice_channel(None)
+        client.set_mute_status(True)
+        actions.speech.enable()
 
     def discord_focus_meeting():
         """focuses the current meeting"""
