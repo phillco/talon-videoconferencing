@@ -395,5 +395,10 @@ class Actions:
         settings = client.get_voice_settings()
         old_status = settings["mute"]
         new_status = not old_status
+        if new_status:
+            actions.user.play("~/Dropbox/Resources/discord_sounds/mute.mp3")
+        else:
+            actions.user.play("~/Dropbox/Resources/discord_sounds/unmute.mp3")
+
         client.set_mute_status(new_status)
         return new_status
